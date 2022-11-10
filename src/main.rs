@@ -33,20 +33,29 @@ async fn main() -> Result<()> {
 fn pipe(a: TcpStream, b: TcpStream) -> Result<()> {
     let (arx, atx) = a.into_split();
     let (brx, btx) = b.into_split();
-    spawn(pipe_half(arx, btx));
-    spawn(pipe_half(brx, atx));
+    pipe_half(arx, btx);
+    pipe_half(brx, atx);
     Ok(())
 }
 
-async fn pipe_half(mut rx: OwnedReadHalf, mut tx: OwnedWriteHalf) {
-    let mut buf = [0; 1024];
-    while let Ok(size) = rx.read(&mut buf).await {
-        if size == 0 {
-            break;
-        } else {
-            if let Err(e) = tx.write_all(&buf[..size]).await {
-                println!("{e}");
-            };
+fn pipe_half(mut srx: OwnedReadHalf, mut stx: OwnedWriteHalf) {
+    let (ctx, crx) = flume::unbounded();
+    spawn(async move {
+        loop {
+            let mut buf = Vec::with_capacity(1024);
+            if srx.read_buf(&mut buf).await? == 0 {
+                break;
+            } else {
+                ctx.send_async(buf).await?;
+            }
         }
-    }
+        Ok::<(), Error>(())
+    });
+    spawn(async move {
+        loop {
+            stx.write_all(&crx.recv_async().await?).await?;
+        }
+        #[allow(unreachable_code)]
+        Ok::<(), Error>(())
+    });
 }

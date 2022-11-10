@@ -9,3 +9,4 @@ features = ["full"]
 
 [dependencies]
 anyhow = "1.0"
+flume = "0.10"
