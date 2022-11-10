@@ -4,7 +4,7 @@ use std::{
     str::FromStr,
 };
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Error, Result};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{
@@ -33,15 +33,23 @@ async fn main() -> Result<()> {
 fn pipe(a: TcpStream, b: TcpStream) -> Result<()> {
     let (arx, atx) = a.into_split();
     let (brx, btx) = b.into_split();
-    spawn(async { pipe_half(arx, btx) });
-    spawn(async { pipe_half(brx, atx) });
+    spawn(async move { pipe_half(arx, btx) });
+    spawn(async move { pipe_half(brx, atx) });
     Ok(())
 }
 
 async fn pipe_half(mut rx: OwnedReadHalf, mut tx: OwnedWriteHalf) {
-    let mut buf = [0; 1024];
-    loop {
-        let size = rx.read(&mut buf).await.unwrap();
-        tx.write_all(&buf[..size]).await.unwrap();
+    if let Err(e) = async move {
+        let mut buf = [0; 1024];
+        loop {
+            let size = rx.read(&mut buf).await?;
+            tx.write_all(&buf[..size]).await?;
+        }
+        #[allow(unreachable_code)]
+        Ok::<(), Error>(())
+    }
+    .await
+    {
+        println!("{}", e)
     }
 }
