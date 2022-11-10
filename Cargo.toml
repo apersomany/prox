@@ -1,0 +1,11 @@
+[package]
+name = "prox"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies.tokio]
+version = "1.21"
+features = ["full"]
+
+[dependencies]
+anyhow = "1.0"
