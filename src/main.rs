@@ -7,7 +7,10 @@ use std::{
 use anyhow::{Context, Result};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
-    net::{TcpListener, TcpSocket, TcpStream},
+    net::{
+        tcp::{OwnedReadHalf, OwnedWriteHalf},
+        TcpListener, TcpSocket, TcpStream,
+    },
     spawn,
 };
 
@@ -28,21 +31,17 @@ async fn main() -> Result<()> {
 }
 
 fn pipe(a: TcpStream, b: TcpStream) -> Result<()> {
-    let (mut arx, mut atx) = a.into_split();
-    let (mut brx, mut btx) = b.into_split();
-    spawn(async move {
-        let mut buf = [0; 1024];
-        loop {
-            let size = arx.read(&mut buf).await.unwrap();
-            btx.write_all(&buf[..size]).await.unwrap();
-        }
-    });
-    spawn(async move {
-        let mut buf = [0; 1024];
-        loop {
-            let size = brx.read(&mut buf).await.unwrap();
-            atx.write_all(&buf[..size]).await.unwrap();
-        }
-    });
+    let (arx, atx) = a.into_split();
+    let (brx, btx) = b.into_split();
+    spawn(async { pipe_half(arx, btx) });
+    spawn(async { pipe_half(brx, atx) });
     Ok(())
+}
+
+async fn pipe_half(mut rx: OwnedReadHalf, mut tx: OwnedWriteHalf) {
+    let mut buf = [0; 1024];
+    loop {
+        let size = rx.read(&mut buf).await.unwrap();
+        tx.write_all(&buf[..size]).await.unwrap();
+    }
 }
