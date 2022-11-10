@@ -17,7 +17,7 @@ use tokio::{
 #[tokio::main]
 async fn main() -> Result<()> {
     let bind = args().nth(1).context("Arg 1 should be bind addr")?;
-    let conn = args().nth(1).context("Arg 2 should be cind addr")?;
+    let conn = args().nth(2).context("Arg 2 should be cind addr")?;
     let bind = SocketAddr::from_str(&bind)?;
     let conn = SocketAddr::from_str(&conn)?;
 
@@ -33,23 +33,20 @@ async fn main() -> Result<()> {
 fn pipe(a: TcpStream, b: TcpStream) -> Result<()> {
     let (arx, atx) = a.into_split();
     let (brx, btx) = b.into_split();
-    spawn(async move { pipe_half(arx, btx) });
-    spawn(async move { pipe_half(brx, atx) });
+    spawn(pipe_half(arx, btx));
+    spawn(pipe_half(brx, atx));
     Ok(())
 }
 
 async fn pipe_half(mut rx: OwnedReadHalf, mut tx: OwnedWriteHalf) {
-    if let Err(e) = async move {
-        let mut buf = [0; 1024];
-        loop {
-            let size = rx.read(&mut buf).await?;
-            tx.write_all(&buf[..size]).await?;
+    let mut buf = [0; 1024];
+    while let Ok(size) = rx.read(&mut buf).await {
+        if size == 0 {
+            break;
+        } else {
+            if let Err(e) = tx.write_all(&buf[..size]).await {
+                println!("{e}");
+            };
         }
-        #[allow(unreachable_code)]
-        Ok::<(), Error>(())
-    }
-    .await
-    {
-        println!("{}", e)
     }
 }
